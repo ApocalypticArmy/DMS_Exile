@@ -14,90 +14,75 @@
     _objectOrGroup call DMS_fnc_CleanUp;
 */
 
-
 if (DMS_DEBUG) then
 {
-    diag_log ("DMS_DEBUG CleanUp :: CLEANING UP: "+str _this);
+    (format ["CleanUp :: CLEANING UP: %1",_this]) call DMS_fnc_DebugLog;
 };
 
-if !((typeName _this) == "ARRAY") then
+if !(_this isEqualType []) then
 {
     _this = [_this];
 };
 
-private ["_skippedObjects","_clean"];
 
-_skippedObjects = [];
-
-_clean =
-{   
-    {
-        detach _x;
-        _x call _clean;
-    } forEach (attachedObjects _x);
-    _this enableSimulationGlobal false;
-    _this removeAllMPEventHandlers "mpkilled";
-    _this removeAllMPEventHandlers "mphit";
-    _this removeAllMPEventHandlers "mprespawn";
-    _this removeAllEventHandlers "FiredNear";
-    _this removeAllEventHandlers "HandleDamage";
-    _this removeAllEventHandlers "Killed";
-    _this removeAllEventHandlers "Fired";
-    _this removeAllEventHandlers "GetOut";
-    _this removeAllEventHandlers "GetIn";
-    _this removeAllEventHandlers "Local";
-    deleteVehicle _this;
-};
-
-
+private _skippedObjects = [];
 {
-    if ((typeName _x) == "OBJECT") then
-    {
-        if (isNull _x) exitWith {};
+    private _parameter = _x;
 
-        if !([_x,DMS_CleanUp_PlayerNearLimit] call DMS_fnc_IsPlayerNearby) then
+    switch (typeName _parameter) do
+    {
+        case "ARRAY":
         {
-            _x call _clean;
-        }
-        else
-        {
-            _skippedObjects pushBack _x;
             if (DMS_DEBUG) then
             {
-                diag_log format ["DMS_DEBUG CleanUp :: Skipping cleanup for |%1|, player within %2 meters!",_x,DMS_CleanUp_PlayerNearLimit];
+                (format ["CleanUp :: Doing recursive call for ARRAY: %1",_parameter]) call DMS_fnc_DebugLog;
             };
+            _parameter call DMS_fnc_CleanUp;
         };
-    }
-    else
-    {
-        if ((typeName _x) == "GROUP") exitWith
-        {
-            if (!isNull _x) then
-            {
-                // Group cleanup should only be called when it has to be deleted regardless, so no need to check for nearby players
-                {
-                    _x call _clean;
-                } forEach (units _x);
 
-                if(local _x)then
+        case "OBJECT":
+        {
+            if (isNull _parameter) exitWith {};
+
+            if !([_parameter,DMS_CleanUp_PlayerNearLimit] call DMS_fnc_IsPlayerNearby) then
+            {
+                _parameter call ExileServer_system_garbageCollector_deleteObject;
+            }
+            else
+            {
+                _skippedObjects pushBack _parameter;
+                if (DMS_DEBUG) then
                 {
-                    deleteGroup _x;
-                }
-                else
-                {
-                    [groupOwner _x,"DeleteGroupPlz",[_x]] call ExileServer_system_network_send_to;
+                    (format ["CleanUp :: Skipping cleanup for |%1|, player within %2 meters!",_parameter,DMS_CleanUp_PlayerNearLimit]) call DMS_fnc_DebugLog;
                 };
             };
         };
-        if ((typeName _x) == "ARRAY") exitWith
+
+        case "GROUP":
         {
-            if (DMS_DEBUG) then
+            if (isNull _parameter) exitWith {};
+
+            // Group cleanup should only be called when it has to be deleted regardless of player presence, so no need to check for nearby players
+            // If you want to check player presence before deleting a group, then do {(units _group) call DMS_fnc_CleanUp} instead of {_group call DMS_fnc_CleanUp}
             {
-                diag_log format ["DMS_DEBUG CleanUp :: Doing recursive call for ARRAY: %1",_x];
+                _x call ExileServer_system_garbageCollector_deleteObject;
+            } forEach (units _parameter);
+
+            if (local _parameter) then
+            {
+                deleteGroup _parameter;
+            }
+            else
+            {
+                [groupOwner _parameter, "DeleteGroupPlz", [_parameter]] call ExileServer_system_network_send_to;
             };
-            _x call DMS_fnc_CleanUp;
         };
-        diag_log format ["DMS ERROR :: Attempted to call DMS_fnc_CleanUp on non- group or object %1 from array %2",_x,_this];
+
+        default
+        {
+            diag_log format ["DMS ERROR :: Calling DMS_fnc_CleanUp with an invalid parameter: %1 | Type: %2", _parameter, typeName _parameter];
+            []
+        };
     };
 } forEach _this;
 

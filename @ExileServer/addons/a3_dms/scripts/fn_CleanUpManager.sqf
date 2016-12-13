@@ -17,24 +17,21 @@
 
 	A single object can also be used for (_this select 0)
 */
-if (DMS_CleanUpList isEqualTo []) exitWith {};		// Empty array, no objects to clean :)
 
 {
 	if (DMS_DEBUG) then
 	{
-		diag_log format ["DMS_DEBUG CleanUpManager :: Checking Cleaning Status for: %1",_x];
+		(format ["CleanUpManager :: Checking Cleaning Status for: %1",_x]) call DMS_fnc_DebugLog;
 	};
 
-	private ["_objs","_timeAddedToList","_timeUntilClean"];
 
-	_OK = _x params
+	if !(_x params
 	[
-		["_objs",[objNull],[objNull,[],grpNull]],
-		["_timeAddedToList",diag_tickTime,[0]],
-		["_timeUntilClean",DMS_CompletedMissionCleanupTime,[0]]
-	];
-	
-	if (!_OK) then
+		"_objs",
+		"_timeAddedToList",
+		"_timeUntilClean"
+	])
+	then
 	{
 		diag_log format ["DMS ERROR :: Invalid parameters for DMS_fnc_CleanUpManager: %1 replaced with %2",_x,[_objs,_timeAddedToList,_timeUntilClean]];
 	};
@@ -42,12 +39,13 @@ if (DMS_CleanUpList isEqualTo []) exitWith {};		// Empty array, no objects to cl
 	if ((diag_tickTime-_timeAddedToList)>=_timeUntilClean) then
 	{
 		_objs call DMS_fnc_CleanUp;
+		DMS_CleanUpList deleteAt _forEachIndex;
 	}
 	else
 	{
 		if (DMS_DEBUG) then
 		{
-			diag_log format ["DMS_DEBUG CleanUpManager :: %1 is not yet ready to clean!",_x];
+			(format ["CleanUpManager :: %1 is not yet ready to clean!",_x]) call DMS_fnc_DebugLog;
 		};
 	};
 } forEach DMS_CleanUpList;

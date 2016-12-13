@@ -15,12 +15,8 @@
 		_markerDot,
 		_markerCircle
 	]
-	
+
 */
-
-
-private["_pos", "_text", "_difficulty", "_randomMarker", "_num", "_color", "_dot", "_circle", "_dir", "_dis", "_npos"];
-
 
 params
 [
@@ -37,32 +33,72 @@ if ((_pos isEqualTo "ERROR") || ("_text" isEqualTo "ERROR")) exitWith
 };
 
 
-_randomMarker = DMS_MarkerPosRandomization;
-if ((count _this)>3) then
+private _randomMarker =
+	if ((count _this)>3) then
+	{
+		_this select 3;
+	}
+	else
+	{
+		DMS_MarkerPosRandomization;
+	};
+
+private _num = DMS_MissionCount;
+
+
+private _markerType = "mil_dot";
+
+private _color =
+	switch (toLower _difficulty) do
+	{
+		case "easy":
+		{
+			_markerType = "ExileMissionEasyIcon";
+			"ColorGreen"
+		};
+		case "moderate":
+		{
+			_markerType = "ExileMissionModerateIcon";
+			"ColorYellow"
+		};
+		case "difficult":
+		{
+			_markerType = "ExileMissionDifficultIcon";
+			"ColorRed"
+		};
+		case "hardcore":
+		{
+			_markerType = "ExileMissionHardcoreIcon";
+			"ColorBlack"
+		};
+
+		default
+		{
+			_difficulty
+		};
+	};
+
+/*
+// Don't think this is really needed, ArmA gives you an error anyways.
+if !((toLower _color) in DMS_A3_AllMarkerColors) then
 {
-	_randomMarker = param [3,DMS_MarkerPosRandomization,[false]];
+	diag_log format ["DMS ERROR :: Color ""%1"" is not a valid marker color! Switching to ""ColorRed""",_color];
+	_color = "ColorRed";
+};
+*/
+
+private _circle = createMarker [format ["DMS_MissionMarkerCircle%1_%2",_num,round(time)], _pos];
+
+if (DMS_ShowMarkerCircle) then
+{
+	_circle setMarkerColor _color;
+	_circle setMarkerShape "ELLIPSE";
+	_circle setMarkerBrush "Solid";
+	_circle setMarkerSize [150,150];
 };
 
-_num = DMS_MissionCount;
-
-switch (_difficulty) do
-{
-	case "easy": 		{_color = "ColorGreen";};
-	case "moderate": 	{_color = "ColorYellow";};
-	case "difficult": 	{_color = "ColorRed";};
-	case "hardcore" : 	{_color = "ColorBlack";};
-	default 			{_color = _difficulty;};
-};
-
-_circle = createMarker [format ["DMS_MissionMarkerCircle%1",_num], _pos];
-_circle setMarkerColor _color;
-_circle setMarkerShape "ELLIPSE";
-_circle setMarkerBrush "Solid";
-_circle setMarkerSize [150,150];
-
-_dot = createMarker [format ["DMS_MissionMarkerDot%1",_num], _pos];
-_dot setMarkerColor "ColorBlack";
-_dot setMarkerType "mil_dot";
+private _dot = createMarker [format ["DMS_MissionMarkerDot%1_%2",_num,round(time)], _pos];
+_dot setMarkerType _markerType;
 _dot setMarkerText _text;
 
 missionNamespace setVariable [format ["%1_pos",_dot], _pos];
@@ -75,9 +111,8 @@ if (DMS_MarkerText_ShowMissionPrefix) then
 
 if (_randomMarker) then
 {
-	_dir = random 360;
-	_dis = DMS_MarkerPosRandomRadius call DMS_fnc_SelectRandomVal;
-	_npos = [_pos,_dis,_dir] call DMS_fnc_SelectOffsetPos;
+	private _dis = DMS_MarkerPosRandomRadius call DMS_fnc_SelectRandomVal;
+	private _npos = _pos getPos [_dis,random 360];
 
 	_circle setMarkerPos _npos;
 	_dot setMarkerPos _npos;
@@ -85,13 +120,13 @@ if (_randomMarker) then
 
 	if (DMS_DEBUG) then
 	{
-		diag_log format ["Moving markers %1 from %2 to %3 (%4m away)",[_dot,_circle],_pos,_npos,_dis];
+		(format ["CreateMarker :: Moving markers %1 from %2 to %3 (%4m away)",[_dot,_circle],_pos,_npos,_dis]) call DMS_fnc_DebugLog;
 	};
 };
 
 if (DMS_DEBUG) then
 {
-	diag_log format ["DMS_DEBUG CreateMarker :: Created markers |%1| at %2 with text |%3| colored %4",[_dot,_circle],_pos,_text,_color];
+	(format ["CreateMarker :: Created markers |%1| at %2 with text |%3| colored %4",[_dot,_circle],_pos,_text,_color]) call DMS_fnc_DebugLog;
 };
 
 

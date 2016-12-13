@@ -10,21 +10,21 @@
 
 	Returns whether or not a player is within "_distance" meters of "_positionOrObject".
 */
- 
-private ["_pos", "_dis", "_isNear"];
 
-_OK = params
+if !(params
 [
-	["_pos", "", [objNull,[]], [2,3]],
-	["_dis", 0, [0]]
-];
-
-if (!_OK) exitWith
+	"_pos",
+	"_dis"
+])
+exitWith
 {
 	diag_log format ["DMS ERROR :: Calling DMS_fnc_IsPlayerNearby with invalid parameters: %1",_this];
+	false;
 };
 
-_isNear = false;
+if (_dis isEqualTo 0) exitWith {false};
+
+private _isNear = false;
 
 try
 {
@@ -36,13 +36,18 @@ try
 			};
 		} forEach (crew _x);
 	} forEach (_pos nearEntities [["Exile_Unit_Player","LandVehicle", "Air", "Ship"], _dis]);
+
+	if (DMS_DEBUG) then
+	{
+		(format ["IsPlayerNearby :: No players within %1 meters of %2!",_dis,_pos]) call DMS_fnc_DebugLog;
+	};
 }
 catch
 {
 	_isNear = true;
 	if (DMS_DEBUG) then
 	{
-		diag_log format ["DMS_DEBUG IsPlayerNearby :: %1 is within %2 meters of %3!",_exception,_dis,_pos];
+		(format ["IsPlayerNearby :: %1 is within %2 meters of %3!",_exception,_dis,_pos]) call DMS_fnc_DebugLog;
 	};
 };
 

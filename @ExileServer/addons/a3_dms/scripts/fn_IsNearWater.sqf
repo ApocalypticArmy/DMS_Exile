@@ -11,17 +11,29 @@
 
 */
 
-private["_result","_position","_radius"];
+if !(params
+[
+	"_position",
+	"_radius"
+])
+exitWith
+{
+	diag_log format["DMS ERROR :: Calling DMS_fnc_IsNearWater with invalid parameters: %1",_this];
+	false
+};
 
-_result 	= false;
-_position 	= _this select 0;
-_radius		= _this select 1;
+private _result	= false;
 
 try
 {
+	if (surfaceIsWater _position) then
+	{
+		throw true;
+	};
+
 	for "_i" from 0 to 359 step 45 do
 	{
-		if (surfaceIsWater ([_position,_radius,_i] call DMS_fnc_SelectOffsetPos)) then
+		if (surfaceIsWater (_position getPos [_radius,_i])) then
 		{
 			throw true;
 		};

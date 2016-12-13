@@ -7,28 +7,30 @@
 		_vehicleClass,			// STRING: Vehicle classname to spawn.
 		_pos,					// ARRAY (positionATL or position2d): Where the vehicle will be spawned (strict)
 		_pinCode				// STRING or NUMBER: String has to be 4 digits. Number has to be between 0-9999, and will be automatically formatted.
+		_spawnATL				// (OPTIONAL) BOOLEAN: Whether or not to spawn the vehicle ATL (Above Terrain Level) or ASL (Above Sea Level). Default: true (ATL)
 	] call DMS_fnc_SpawnPersistentVehicle;
 
 	Returns the created vehicle object.
 */
 
-
-private ["_vehicleClass", "_pos", "_pinCode", "_vehObj"];
-
-_OK = params
-[
-	["_vehicleClass","",[""]],
-	["_pos",[],[[]],[2,3]],
-	["_pinCode","",[0,""]]
-];
-
-_vehObj = objNull;
+private _vehObj = objNull;
 
 try
 {
-	if (!_OK) then
+	if !(params
+	[
+		"_vehicleClass",
+		"_pos",
+		"_pinCode"
+	])
+	then
 	{
 		throw (format ["invalid parameters: %1",_this]);
+	};
+
+	if !(isClass (configFile >> "CfgVehicles" >> _vehicleClass)) then
+	{
+		throw (format ["non-existent vehicle className: %1",_vehicleClass]);
 	};
 
 
@@ -38,7 +40,7 @@ try
 	};
 
 
-	if ((typeName _pinCode)=="SCALAR") then
+	if (_pinCode isEqualType 0) then
 	{
 		if (_pinCode<0 || {_pinCode>9999}) then
 		{
@@ -74,18 +76,27 @@ try
 		throw (format ["invalid STRING _pinCode value (must be 4 digits): %1",_pinCode]);
 	};
 
+	private _spawnATL = if ((count _this)>3) then {_this select 3} else {true};
+
 	// Create and set the vehicle
 	_vehObj = [_vehicleClass,_pos] call DMS_fnc_SpawnNonPersistentVehicle;
-	_vehObj setPosATL _pos;
 
-	// Set up EHs
+	if (_spawnATL) then
+	{
+		_vehObj setPosATL _pos;
+	}
+	else
+	{
+		_vehObj setPosASL _pos;
+	};
+
+	// Save vehicle on exit.
 	_vehObj addEventHandler ["GetOut", { _this call ExileServer_object_vehicle_event_onGetOut}];
-	_vehObj addMPEventHandler ["MPKilled", { _this call ExileServer_object_vehicle_event_onMPKilled}];
 
 	// Set up vars
 	_vehObj setVariable ["ExileIsPersistent", true];
 	_vehObj setVariable ["ExileAccessCode", _pinCode];
-	_vehObj setVariable ["ExileOwnerUID", "76561198027700602"];		// That is my (eraser1's) PUID. Just so you don't think I'm trying to be sneaky...
+	_vehObj setVariable ["ExileOwnerUID", "DMS_PersistentVehicle"];		// Don't change this unless you know what you're doing.
 
 	// Deny access until specified to do so.
 	_vehObj setVariable ["ExileIsLocked",-1];
@@ -97,7 +108,6 @@ catch
 {
 	diag_log format ["DMS ERROR :: Calling DMS_fnc_SpawnPersistentVehicle with %1!",_exception];
 };
-
 
 
 _vehObj

@@ -8,14 +8,12 @@
 	Apply magazine type filters if needed
 */
 
+private _result 	= "";
+private _magArray 	= getArray (configFile >> "CfgWeapons" >> _this >> "magazines");
 
-private["_result","_ammoArray"];
-
-_result 	= "";
-_ammoArray 	= getArray (configFile >> "CfgWeapons" >> _this >> "magazines");
-
-if (count _ammoArray > 0) then {
-	_result = _ammoArray select 0;
+if (count _magArray > 0) then
+{
+	_result = _magArray select 0;
 };
 
 _result

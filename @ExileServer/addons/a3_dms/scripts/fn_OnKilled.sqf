@@ -13,108 +13,161 @@
 		_type				// Type of AI: "soldier","static","vehicle","heli", etc.
 	] call DMS_fnc_OnKilled;
 */
-
-
-private ["_unit", "_killer", "_side", "_type", "_launcher", "_launcherVar", "_playerObj", "_removeAll", "_rockets", "_grpUnits", "_av", "_memCount", "_gunner", "_driver", "_gunnerIsAlive", "_driverIsAlive", "_grp", "_owner", "_start", "_roadKilled", "_veh", "_boom", "_revealAmount", "_silencer", "_moneyChange", "_repChange", "_money", "_respect", "_msgType", "_msgParams"];
-
-
 if (DMS_DEBUG) then
 {
-	diag_log format ["DMS_DEBUG OnKilled :: Logging AI death with parameters: %1",_this];
+	(format ["OnKilled :: Logging AI death with parameters: %1",_this]) call DMS_fnc_DebugLog;
 };
-	
-_unit 			= _this select 0 select 0;
-_killer 		= _this select 0 select 1;
-_side 			= _this select 1;
-_type 			= _this select 2;
-_launcher 		= secondaryWeapon _unit;
-_launcherVar	= _unit getVariable ["DMS_AI_Launcher",""];
-_playerObj		= objNull;
+
+params
+[
+	"_unit",
+	"_killer"
+];
+private _side 			= _unit getVariable ["DMS_AI_Side", "bandit"];
+private _type 			= _unit getVariable ["DMS_AI_Type", "soldier"];
+private _launcher 		= secondaryWeapon _unit;
+private _launcherVar	= _unit getVariable ["DMS_AI_Launcher",""];
+private _playerObj		= objNull;
+
+_unit call ([missionNamespace getVariable [_unit getVariable ["DMS_AI_CustomOnKilledFnc",""],{}]] param [0,{},[{}]]);
 
 // Some of the previously used functions work with non-local argument. Some don't. BIS is annoying
-_removeAll =
+private _removeAll =
 {
 	{_this removeWeaponGlobal _x;} forEach (weapons _this);
 	{_this unlinkItem _x;} forEach (assignedItems _this);
 	{_this removeItem _x;} forEach (items _this);
 
-	removeAllItemsWithMagazines 	_unit;
-	removeHeadgear 					_unit;
-	removeUniform 					_unit;
-	removeVest 						_unit;
-	removeBackpackGlobal 			_unit;
+	removeAllItemsWithMagazines 	_this;
+	removeHeadgear 					_this;
+	removeUniform 					_this;
+	removeVest 						_this;
+	removeBackpackGlobal 			_this;
 };
 
 moveOut _unit;
 
+_unit removeAllEventHandlers "HandleDamage";
+_unit enableSimulationGlobal true;
+
 // Remove gear according to configs
-if (DMS_clear_AI_body && {(random 100) <= DMS_clear_AI_body_chance}) then
+if ((_unit getVariable ["DMS_clear_AI_body",DMS_clear_AI_body]) && {(random 100) <= (_unit getVariable ["DMS_clear_AI_body_chance",DMS_clear_AI_body_chance])}) then
 {
 	_unit call _removeAll;
 };
 
-if(DMS_ai_remove_launchers && {(_launcherVar != "") || {_launcher != ""}}) then
+if ((_unit getVariable ["DMS_ai_remove_launchers",DMS_ai_remove_launchers]) && {(_launcherVar != "") || {_launcher != ""}}) then
 {
 	// Because arma is stupid sometimes
-	if (_launcher=="") then
+	if (_launcher isEqualTo "") then
 	{
 		_launcher = _launcherVar;
 
 		diag_log "sneaky launchers...";
 
+		_unit spawn
 		{
-			if (_launcherVar in (weaponCargo _x)) exitWith
+			sleep 0.5;
+
 			{
-				deleteVehicle _x;
-				diag_log "gotcha";
-			};
-		} forEach (nearestObjects [_unit, ["GroundWeaponHolder","WeaponHolderSimulated"], 5]);
+				_holder = _x;
+				{
+					if (_x isKindOf ["LauncherCore", configFile >> "CfgWeapons"]) exitWith
+					{
+						deleteVehicle _holder;
+						diag_log "gotcha";
+					};
+				} forEach (weaponCargo _holder);
+			} forEach (nearestObjects [_this, ["GroundWeaponHolder","WeaponHolderSimulated"], 5]);
+		};
 	};
 
-	_rockets = _launcher call DMS_fnc_selectMagazine;
 	_unit removeWeaponGlobal _launcher;
-	
+
 	{
-		if(_x == _rockets) then
+		if (_x isKindOf ["CA_LauncherMagazine", configFile >> "CfgMagazines"]) then
 		{
 			_unit removeMagazineGlobal _x;
 		};
-	} forEach magazines _unit;
+	} forEach (magazines _unit);
 };
 
-if(DMS_RemoveNVG) then
+if (_unit getVariable ["DMS_RemoveNVG",DMS_RemoveNVG]) then
 {
 	_unit unlinkItem "NVGoggles";
 };
 
-
+private _grp = group _unit;
+private _grpUnits = (units _grp) - [_unit];
 // Give the AI a new leader if the killed unit was the leader
-// credit: https://github.com/SMVampire/VEMF/
-if (((count (units group _unit)) > 1) && {(leader group _unit) == _unit}) then
+if (!(_grpUnits isEqualTo []) && {(leader _grp) isEqualTo _unit}) then
 {
-	_grpUnits = units group _unit;
-	_grpUnits = _grpUnits - [_unit];
-	(group _unit) selectLeader (_grpUnits call BIS_fnc_selectRandom);
+	_grp selectLeader (selectRandom _grpUnits);
 };
 
-_av = _unit getVariable ["DMS_AssignedVeh",objNull];
+private _av = _unit getVariable ["DMS_AssignedVeh",objNull];
 if (!isNull _av) then
 {
+	_av enableSimulationGlobal true;
+
 	// Determine whether or not the vehicle has any active crew remaining.
-	_memCount = {[(alive _x),false] select (_unit isEqualTo _x);} count (crew _av);
+	private _memCount = {[(alive _x),false] select (_unit isEqualTo _x);} count (crew _av);
 
 
 	// Destroy the vehicle and add it to cleanup if there are no active crew members of the vehicle.
-	if (_memCount<1) then
+	if (_memCount isEqualTo 0) then
 	{
-		_av setDamage 1;
-		DMS_CleanUpList pushBack [_av,diag_tickTime,DMS_AIVehCleanUpTime];
-		_av spawn {sleep 1;_this enableSimulationGlobal false;};
-
-
-		if (DMS_DEBUG) then
+		/*
+		This is some pretty funky code because this is about the fastest way to do the task.
+		An "if-statement" inside another "if-statement" is almost as fast, but it isn't as slick ;)
+		*/
+		if
+		(
+			call
+			([
+				{	(random 100)<(_av getVariable ["DMS_DestructionChance",DMS_AI_destroyVehicleChance])	},
+				{	DMS_AI_destroyStaticWeapon && {(random 100)<(_av getVariable ["DMS_DestructionChance",DMS_AI_destroyStaticWeapon_chance])}	}
+			] select (_av isKindOf "StaticWeapon"))
+		) then
 		{
-			diag_log format["DMS_DEBUG OnKilled :: Destroying used AI vehicle %1, disabling simulation, and adding to cleanup.",typeOf _av];
+			_av setDamage 1;
+			_av setVariable ["ExileDiedAt",time];
+
+			[if (_av isKindOf "Air") then {30} else {5}, {_this enableSimulationGlobal false}, _av, false, false] call ExileServer_system_thread_addTask;
+
+
+			if (DMS_DEBUG) then
+			{
+				(format["OnKilled :: Destroying used AI vehicle %1, and disabling simulation.",typeOf _av]) call DMS_fnc_DebugLog;
+			};
+		}
+		else
+		{
+			if (local _av) then
+			{
+				_av lock 1;
+			}
+			else
+			{
+				[_av, 1] remoteExecCall ["lock", _av];
+			};
+
+			_av call ExileServer_system_simulationMonitor_addVehicle;
+
+			_av setVariable ["ExileMoney",0,true];
+			_av setVariable ["ExileIsPersistent", false];
+			_av addMPEventHandler ["MPKilled", { if (isServer) then {_this call ExileServer_object_vehicle_event_onMPKilled;};}];
+			_av addEventHandler ["GetIn", {_this call ExileServer_object_vehicle_event_onGetIn}];
+
+			if (!isNil "AVS_Version") then
+			{
+				_av call AVS_fnc_sanitizeVehicle;
+			};
+
+			if (DMS_DEBUG) then
+			{
+				(format["OnKilled :: Unlocking used AI vehicle (%1).",typeOf _av]) call DMS_fnc_DebugLog;
+			};
 		};
 	}
 	else
@@ -122,13 +175,13 @@ if (!isNull _av) then
 		// Only check for this stuff for ground vehicles that have guns...
 		if ((_av isKindOf "LandVehicle") && {(count (weapons _av))>0}) then
 		{
-			_gunner = gunner _av;
-			_driver = driver _av;
+			private _gunner = gunner _av;
+			private _driver = driver _av;
 
 
 			// The fact that I have to do this in the FUCKING ONKILLED EVENTHANDLER is a testament to why ArmA will make me die prematurely
-			_gunnerIsAlive = alive _gunner;
-			_driverIsAlive = alive _driver;
+			private _gunnerIsAlive = alive _gunner;
+			private _driverIsAlive = alive _driver;
 
 			if (_unit isEqualTo _gunner) then
 			{
@@ -145,18 +198,22 @@ if (!isNull _av) then
 			{
 				[_driver,_av,_killer] spawn
 				{
-					_driver 	= _this select 0;
-					_av 		= _this select 1;
-					_killer 	= _this select 2;
-					_grp 		= group _driver;
-					_owner 		= groupOwner _grp;
+					params
+					[
+						"_driver",
+						"_av",
+						"_killer"
+					];
+
+					private _grp 		= group _driver;
+					private _owner 		= groupOwner _grp;
 
 					_grp setVariable ["DMS_LockLocality",true];
 
 					// The AI has to be local in order for these commands to work, so I reset locality, just because it's really difficult to deal with otherwise
-					if (_owner!=2) then
+					if !(_owner in [2,0]) then
 					{
-						diag_log format ["Temporarily setting owner of %1 to server from %2. Success: %3",_grp,_owner,_grp setGroupOwner 2];
+						diag_log format ["DMS Seat Switcher :: Temporarily setting owner of %1 to server from %2. Success: %3",_grp,_owner,_grp setGroupOwner 2];
 					};
 
 					sleep 5+(random 3); // 5 to 8 seconds delay after gunner death
@@ -165,7 +222,7 @@ if (!isNull _av) then
 
 					unassignVehicle _driver;
 					moveOut _driver;
-					
+
 					_driver disableCollisionWith _av;
 
 					_av setVehicleAmmoDef 1;
@@ -185,18 +242,18 @@ if (!isNull _av) then
 					if !(alive _driver) exitWith {};
 
 					_driver moveInGunner _av;
-					
+
 					_driver enableCollisionWith _av;
 
 					if (DMS_DEBUG) then
 					{
-						diag_log format["DMS_DEBUG OnKilled :: Switched driver of AI Vehicle (%1) to gunner.",typeOf _av];
+						(format["OnKilled :: Switched driver of AI Vehicle (%1) to gunner.",typeOf _av]) call DMS_fnc_DebugLog;
 					};
 
-					if (_owner!=2) then
+					if !(_owner in [2,0]) then
 					{
-						_start = time;
-						
+						private _start = time;
+
 						// Controlling AI... yes. I have to do this
 						waitUntil
 						{
@@ -204,7 +261,7 @@ if (!isNull _av) then
 							[_driver] orderGetIn true;
 
 							_driver moveInGunner _av;
-						
+
 							(((gunner _av) isEqualTo _driver) || {(time-_start)>30})
 						};
 
@@ -218,7 +275,7 @@ if (!isNull _av) then
 							[_driver] orderGetIn true;
 
 							_driver moveInGunner _av;
-						
+
 							(((gunner _av) isEqualTo _driver) || {(time-_start)>30})
 						};
 
@@ -227,7 +284,7 @@ if (!isNull _av) then
 
 						sleep 15;
 
-						diag_log format ["Resetting ownership of %1 to %2. Success: %3",_grp,_owner,_grp setGroupOwner _owner];
+						diag_log format ["DMS Seat Switcher :: Resetting ownership of %1 to %2. Success: %3",_grp,_owner,_grp setGroupOwner _owner];
 					};
 
 					_grp setVariable ["DMS_LockLocality",false];
@@ -237,11 +294,11 @@ if (!isNull _av) then
 	};
 };
 
-_roadKilled = false;
+private _roadKilled = false;
 
 if (isPlayer _killer) then
 {
-	_veh = vehicle _killer;
+	private _veh = vehicle _killer;
 
 	_playerObj = _killer;
 
@@ -253,116 +310,64 @@ if (isPlayer _killer) then
 	};
 
 
-	if (!(_veh isEqualTo _killer) && {(driver _veh) isEqualTo _killer}) then
+	if (!(_veh isEqualTo _killer) && {(driver _veh) isEqualTo _killer} && {(_killer distance _unit)<10}) then
 	{
 		_playerObj = driver _veh;
 
 		_roadKilled = true;
 
-		if (DMS_explode_onRoadkill) then
+		if (_unit getVariable ["DMS_explode_onRoadkill",DMS_explode_onRoadkill]) then
 		{
-			_boom = createVehicle ["SLAMDirectionalMine_Wire_Ammo", ASLToAGL(getPosWorld _unit), [], 0, "CAN_COLLIDE"];
+			private _boom = createVehicle ["SLAMDirectionalMine_Wire_Ammo", [0,0,100], [], 0, "CAN_COLLIDE"];
+			_boom setPosATL (getPosATL _playerObj);
 			_boom setDamage 1;
 			if (DMS_DEBUG) then
 			{
-				diag_log format ["DMS_DEBUG OnKilled :: %1 roadkilled an AI! Creating mine at the roadkilled AI's position!",name _killer];
+				(format ["OnKilled :: %1 roadkilled an AI! Creating mine at the roadkilled AI's position!",name _killer]) call DMS_fnc_DebugLog;
 			};
 		};
 
 
 		// Remove gear from roadkills if configured to do so
-		if (DMS_remove_roadkill && {(random 100) <= DMS_remove_roadkill_chance}) then
+		if ((_unit getVariable ["DMS_remove_roadkill",DMS_remove_roadkill]) && {(random 100) <= (_unit getVariable ["DMS_remove_roadkill_chance",DMS_remove_roadkill_chance])}) then
 		{
 			_unit call _removeAll;
 		};
 	};
 
+	_unit setVariable ["DMS_KillerID",owner _playerObj];
+
 
 	// Reveal the killer to the AI units
-	if (DMS_ai_share_info) then
+	if (_unit getVariable ["DMS_ai_share_info",DMS_ai_share_info]) then
 	{
-		_revealAmount = 4.0;
+		private _revealAmount = 3;
 
-		_silencer = _playerObj weaponAccessories currentMuzzle _playerObj select 0;
-		if (!isNil "_silencer" && {_silencer != ""}) then
+		private _muzzle = currentMuzzle _playerObj;
+
+		if (_muzzle isEqualType "") then
 		{
-			_revealAmount = 2.0;
+			private _silencer = _playerObj weaponAccessories _muzzle select 0;
+			if (!isNil "_silencer" && {_silencer != ""}) then
+			{
+				_revealAmount = 1.5;
+			};
 		};
 
-
+		private _shareInfoDistance = _unit getVariable ["DMS_ai_share_info_distance",DMS_ai_share_info_distance];
 		{
-			if ((alive _x) && {!(isPlayer _x) && {((getPosWorld _x) distance2D (getPosWorld _unit)) <= DMS_ai_share_info_distance}}) then
+			if ((_x distance2D _unit) <= _shareInfoDistance) then
 			{
-				_x reveal [_killer, _revealAmount max (_x knowsAbout _playerObj)];
+				_x reveal [_killer, _revealAmount];
 			};
-		} forEach allUnits;
+		} forEach _grpUnits;
 	};
 };
 
 
-if ((!isNull _playerObj) && {((getPlayerUID _playerObj) != "") && {_playerObj isKindOf "Exile_Unit_Player"}}) then
-{
-	_moneyChange = missionNamespace getVariable [format ["DMS_%1_%2_MoneyGain",_side,_type],0];
-	_repChange = missionNamespace getVariable [format ["DMS_%1_%2_RepGain",_side,_type],0];
-
-	if (_roadKilled && {DMS_Diff_RepOrTabs_on_roadkill}) then
-	{
-		_moneyChange = missionNamespace getVariable [format ["DMS_%1_%2_RoadkillMoney",_side,_type],0];
-		_repChange = missionNamespace getVariable [format ["DMS_%1_%2_RoadkillRep",_side,_type],0];
-	};
-
-	if ((_moneyChange!=0) || (_repChange!=0)) then
-	{
-		_money = _playerObj getVariable ["ExileMoney", 0];
-		_respect = _playerObj getVariable ["ExileScore", 0];
-		
-		if (_moneyChange!=0) then
-		{
-			private ["_msgType", "_msgParams"];
-
-			// Set client's money
-			// I also make sure that they don't get negative poptabs
-			_money = (_money + _moneyChange) max 0;
-			_playerObj setVariable ["ExileMoney",_money];
-
-			// Change message for players when they're actually LOSING poptabs
-			_msgType = "moneyReceivedRequest";
-			_msgParams = [str _money, format ["killing a %1 AI",_type]];
-
-			if (_moneyChange<0) then
-			{
-				_msgType = "notificationRequest";
-				_msgParams = ["Whoops",[format ["Lost %1 poptabs from running over a %2 AI!",abs _moneyChange,_type]]];
-
-				// With the error message the money value won't be updated on the client, so I just directly PVC the value.
-				ExileClientPlayerMoney = _money;
-				(owner _playerObj) publicVariableClient "ExileClientPlayerMoney";
-				ExileClientPlayerMoney = nil;
-			};
-
-			// Send notification and update client's money stats
-			[_playerObj, _msgType, _msgParams] call ExileServer_system_network_send_to;
-		};
-
-		if (_repChange!=0) then
-		{
-			// Set client's respect
-			_respect = _respect + _repChange;
-			_playerObj setVariable ["ExileScore",_respect];
-
-			// Send frag message
-			[_playerObj, "showFragRequest", [ [[format ["%1 AI KILL",toUpper _type],_repChange]] ] ] call ExileServer_system_network_send_to;
-
-			// Send updated respect value to client
-			ExileClientPlayerScore = _respect;
-			(owner _playerObj) publicVariableClient "ExileClientPlayerScore";
-			ExileClientPlayerScore = nil;
-		};
-
-		// Update client database entry
-		format["setAccountMoneyAndRespect:%1:%2:%3", _money, _respect, (getPlayerUID _playerObj)] call ExileServer_system_database_query_fireAndForget;
-	};
-};
+[_playerObj, _unit, _side, _type, _roadKilled] call DMS_fnc_PlayerAwardOnAIKill;
 
 
-DMS_CleanUpList pushBack [_unit,diag_tickTime,DMS_CompletedMissionCleanupTime];
+// Let Exile handle the AI Body cleanup.
+_unit setVariable ["ExileDiedAt",time];
+_unit setVariable ["DMS_KillerObj",[_playerObj,_killer] select (isNull _playerObj)];

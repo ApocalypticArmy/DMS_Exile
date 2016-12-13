@@ -1,22 +1,43 @@
 /*
-	Sample mission (duplicate for testing purposes)
+	Sample mission
 */
 
-private ["_num", "_side", "_pos", "_difficulty", "_AICount", "_group", "_crate", "_crate_loot_values", "_msgStart", "_msgWIN", "_msgLOSE", "_missionName", "_missionAIUnits", "_missionObjs", "_markers", "_time", "_added","_building","_vehicle"];
+private ["_num", "_side", "_OK", "_group", "_pos", "_difficulty", "_AICount", "_type", "_launcher", "_crate", "_building", "_vehicle", "_crate_loot_values", "_missionAIUnits", "_missionObjs", "_msgStart", "_msgWIN", "_msgLOSE", "_missionName", "_markers", "_time", "_added", "_cleanup"];
 
 // For logging purposes
 _num = DMS_MissionCount;
 
 
-// Set mission side (only "bandit" is supported for now)
+// Set mission side
 _side = "bandit";
 
 
-// find position
-_pos = 
+// This part is unnecessary, but exists just as an example to format the parameters for "DMS_fnc_MissionParams" if you want to explicitly define the calling parameters for DMS_fnc_FindSafePos.
+// It also allows anybody to modify the default calling parameters easily.
+if ((isNil "_this") || {_this isEqualTo [] || {!(_this isEqualType [])}}) then
+{
+	_this =
+	[
+		[10,DMS_WaterNearBlacklist,DMS_MinSurfaceNormal,DMS_SpawnZoneNearBlacklist,DMS_TraderZoneNearBlacklist,DMS_MissionNearBlacklist,DMS_PlayerNearBlacklist,DMS_TerritoryNearBlacklist,DMS_ThrottleBlacklists],
+		[
+			[]
+		],
+		_this
+	];
+};
+
+// Check calling parameters for manually defined mission position.
+// This mission doesn't use "_extraParams" in any way currently.
+_OK = (_this call DMS_fnc_MissionParams) params
 [
-	10,DMS_WaterNearBlacklist,DMS_MaxSurfaceNormal,DMS_SpawnZoneNearBlacklist,DMS_TraderZoneNearBlacklist,DMS_MissionNearBlacklist,DMS_PlayerNearBlacklist,DMS_ThrottleBlacklists
-]call DMS_fnc_findSafePos;
+	["_pos",[],[[]],[3]],
+	["_extraParams",[]]
+];
+
+if !(_OK) exitWith
+{
+	diag_log format ["DMS ERROR :: Called MISSION medical.sqf with invalid parameters: %1",_this];
+};
 
 
 // Set general mission difficulty
@@ -24,7 +45,6 @@ _difficulty = "easy";
 
 
 // Create AI
-// TODO: Spawn AI only when players are nearby
 _AICount = 4 + (round (random 2));
 
 _group =
@@ -42,14 +62,14 @@ _crate = ["Box_NATO_Wps_F",_pos] call DMS_fnc_SpawnCrate;
 
 _building = createVehicle ["Land_Medevac_HQ_V1_F",[(_pos select 0) - 10, (_pos select 1),-0.1],[], 0, "CAN_COLLIDE"];
 
-_vehicle = ["I_Truck_02_medical_F",_pos] call DMS_fnc_SpawnNonPersistentVehicle;
+_vehicle = ["Exile_Car_Ural_Covered_Worker",_pos] call DMS_fnc_SpawnNonPersistentVehicle;
 
 
 // Set crate loot values
 _crate_loot_values =
 [
 	5,		// Weapons
-	[9,["Exile_Item_InstaDoc","Exile_Item_PlasticBottleFreshWater"]],		// Items
+	[10,DMS_BoxMeds],		// Items
 	3 		// Backpacks
 ];
 
@@ -130,7 +150,7 @@ if !(_added) exitWith
 	} forEach _missionAIUnits;
 
 	_cleanup pushBack ((_missionObjs select 0)+(_missionObjs select 1));
-	
+
 	{
 		_cleanup pushBack (_x select 0);
 	} foreach (_missionObjs select 2);
@@ -154,5 +174,5 @@ if !(_added) exitWith
 
 if (DMS_DEBUG) then
 {
-	diag_log format ["DMS_DEBUG MISSION: (%1) :: Mission #%2 started at %3 with %4 AI units and %5 difficulty at time %6",_missionName,_num,_pos,_AICount,_difficulty,_time];
+	(format ["MISSION: (%1) :: Mission #%2 started at %3 with %4 AI units and %5 difficulty at time %6",_missionName,_num,_pos,_AICount,_difficulty,_time]) call DMS_fnc_DebugLog;
 };

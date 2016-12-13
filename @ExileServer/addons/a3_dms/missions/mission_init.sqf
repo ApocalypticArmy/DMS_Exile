@@ -1,19 +1,18 @@
 /*
-	DMS: mission_init.sqf
+	mission_init.sqf
 	Created by eraser1
 
-	Initializes variables for DMS
+	Initializes dynamic mission variables for DMS
 */
 
-diag_log "DMS :: Initializing Mission Variables";
+diag_log "DMS :: Initializing Dynamic Mission Variables";
 
 // Initialize Variables
 DMS_Mission_Arr					= [];
-DMS_CleanUpList					= [];
 DMS_MissionCount 				= 0;
 DMS_RunningBMissionCount		= 0;
 DMS_BMissionLastStart			= diag_tickTime;
-DMS_BMissionDelay 				= DMS_TimeBetweenMissions call DMS_fnc_SelectRandomVal;
+DMS_BMissionDelay 				= DMS_TimeToFirstMission call DMS_fnc_SelectRandomVal;
 
 
 if (DMS_DEBUG) then
@@ -24,8 +23,18 @@ if (DMS_DEBUG) then
 // Set mission frequencies from config
 DMS_BanditMissionTypesArray = [];
 {
+	private "_missionName";
+
+	_missionName = _x select 0;
+
 	for "_i" from 1 to (_x select 1) do
 	{
-		DMS_BanditMissionTypesArray pushBack (_x select 0);
+		DMS_BanditMissionTypesArray pushBack _missionName;
 	};
+
+	missionNamespace setVariable
+	[
+		format["DMS_Mission_%1",_missionName],
+		compileFinal preprocessFileLineNumbers (format ["\x\addons\DMS\missions\bandit\%1.sqf",_missionName])
+	];
 } forEach DMS_BanditMissionTypes;

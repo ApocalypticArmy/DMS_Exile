@@ -1,7 +1,7 @@
 /*
 	DMS_fnc_MissionSuccessState
 	Created by eraser1
-	
+
 	Usage:
 	[
 		[_completionType1,_completionArgs1,_isAbsoluteCondition],
@@ -11,41 +11,32 @@
 	] call DMS_fnc_MissionSuccessState;
 */
 
-if ((typeName _this) != "ARRAY") exitWith
+if !(_this isEqualType []) exitWith
 {
 	diag_log format ["DMS ERROR :: DMS_fnc_MissionSuccessState called with invalid parameter: %1",_this];
 };
 
-private ["_success", "_exit"];
-
-_success = true;
-_exit = false;
+private _success = true;
+private _exit = false;
 
 {
 	if (_exit) exitWith {};
 
 	try
 	{
-		private ["_OK","_completionType","_completionArgs","_absoluteWinCondition"];
-
-		_OK = _x params
+		if !(_x params
 		[
-			["_completionType", "", [""] ],
-			["_completionArgs", [], [[],grpNull] ]
-		];
-
-		if (!_OK) then
+			"_completionType",
+			"_completionArgs"
+		])
+		then
 		{
 			diag_log format ["DMS ERROR :: DMS_fnc_MissionSuccessState has invalid parameters in: %1",_x];
 			throw "ERROR";
 		};
 
 
-		_absoluteWinCondition = false;
-		if (((count _x)>2) && {_x select 2}) then
-		{
-			_absoluteWinCondition = true;
-		};
+		private _absoluteWinCondition = if ((count _x)>2) then {_x select 2} else {false};
 
 		if (!_success && {!_absoluteWinCondition}) then
 		{
@@ -55,10 +46,10 @@ _exit = false;
 
 		if (DMS_DEBUG) then
 		{
-			diag_log format ["DMS_DEBUG MissionSuccessState :: Checking completion type %1 with parameter %2. Absolute: %3",_completionType,_completionArgs,_absoluteWinCondition];
+			(format ["MissionSuccessState :: Checking completion type ""%1"" with argument |%2|. Absolute: %3",_completionType,_completionArgs,_absoluteWinCondition]) call DMS_fnc_DebugLog;
 		};
 
-		switch (toLower _completionType) do 
+		switch (toLower _completionType) do
 		{
 			case "kill":
 			{
@@ -73,6 +64,10 @@ _exit = false;
 			case "playernear":
 			{
 				_success = _completionArgs call DMS_fnc_IsPlayerNearby;
+			};
+			case "external":			// This is a special completion type. It is intended to be a flag for people who want to control mission completion using _onMonitorStart and _onMonitorEnd through array manipulation. You probably don't want to use this unless you know what you're doing.
+			{
+				_success = _completionArgs;
 			};
 			default
 			{
@@ -92,7 +87,7 @@ _exit = false;
 	{
 		if (DMS_DEBUG) then
 		{
-			diag_log format ["DMS_DEBUG MissionSuccessState :: %1",_exception];
+			(format ["MissionSuccessState :: %1",_exception]) call DMS_fnc_DebugLog;
 		};
 	};
 } forEach _this;

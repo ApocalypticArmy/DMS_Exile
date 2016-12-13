@@ -2,19 +2,42 @@
 	Sample mission (duplicate for testing purposes)
 */
 
+private ["_num", "_side", "_OK", "_group", "_pos", "_difficulty", "_AICount", "_type", "_launcher", "_class", "_pinCode", "_vehicle", "_missionAIUnits", "_missionObjs", "_msgStart", "_msgWIN", "_msgLOSE", "_missionName", "_markers", "_time", "_added", "_cleanup"];
+
 // For logging purposes
 _num = DMS_MissionCount;
 
 
-// Set mission side (only "bandit" is supported for now)
+// Set mission side
 _side = "bandit";
 
 
-// find position
-_pos = 
+// This part is unnecessary, but exists just as an example to format the parameters for "DMS_fnc_MissionParams" if you want to explicitly define the calling parameters for DMS_fnc_FindSafePos.
+// It also allows anybody to modify the default calling parameters easily.
+if ((isNil "_this") || {_this isEqualTo [] || {!(_this isEqualType [])}}) then
+{
+	_this =
+	[
+		[15,DMS_WaterNearBlacklist,DMS_MinSurfaceNormal,DMS_SpawnZoneNearBlacklist,DMS_TraderZoneNearBlacklist,DMS_MissionNearBlacklist,DMS_PlayerNearBlacklist,DMS_TerritoryNearBlacklist,DMS_ThrottleBlacklists],
+		[
+			[]
+		],
+		_this
+	];
+};
+
+// Check calling parameters for manually defined mission position.
+// You can define "_extraParams" to specify the vehicle classname to spawn, either as _classname or [_classname]
+_OK = (_this call DMS_fnc_MissionParams) params
 [
-	15,DMS_WaterNearBlacklist,DMS_MaxSurfaceNormal,DMS_SpawnZoneNearBlacklist,DMS_TraderZoneNearBlacklist,DMS_MissionNearBlacklist,DMS_PlayerNearBlacklist,DMS_ThrottleBlacklists
-]call DMS_fnc_findSafePos;
+	["_pos",[],[[]],[3]],
+	["_extraParams",[]]
+];
+
+if !(_OK) exitWith
+{
+	diag_log format ["DMS ERROR :: Called MISSION thieves.sqf with invalid parameters: %1",_this];
+};
 
 
 // Set general mission difficulty
@@ -22,7 +45,6 @@ _difficulty = "easy";
 
 
 // Create AI
-// TODO: Spawn AI only when players are nearby
 _AICount = 3 + (round (random 1));
 
 _group =
@@ -35,7 +57,29 @@ _group =
 ] call DMS_fnc_SpawnAIGroup;
 
 
-_class = (DMS_MilitaryVehicles+DMS_TransportTrucks) call BIS_fnc_SelectRandom;
+_class =
+	if (_extraParams isEqualTo []) then
+	{
+		DMS_CarThievesVehicles call BIS_fnc_SelectRandom
+	}
+	else
+	{
+		if (_extraParams isEqualType "") then
+		{
+			_extraParams
+		}
+		else
+		{
+			if ((_extraParams isEqualType []) && {(_extraParams select 0) isEqualType ""}) then
+			{
+				_extraParams select 0
+			}
+			else
+			{
+				DMS_CarThievesVehicles call BIS_fnc_SelectRandom
+			};
+		};
+	};
 
 //DMS_fnc_SpawnPersistentVehicle will automatically turn the pincode into a string and format it.
 _pinCode = round (random 9999);
@@ -121,7 +165,7 @@ if !(_added) exitWith
 	} forEach _missionAIUnits;
 
 	_cleanup pushBack ((_missionObjs select 0)+(_missionObjs select 1));
-	
+
 	{
 		_cleanup pushBack (_x select 0);
 	} foreach (_missionObjs select 2);
@@ -145,5 +189,5 @@ if !(_added) exitWith
 
 if (DMS_DEBUG) then
 {
-	diag_log format ["DMS_DEBUG MISSION: (%1) :: Mission #%2 started at %3 with %4 AI units and %5 difficulty at time %6",_missionName,_num,_pos,_AICount,_difficulty,_time];
+	(format ["MISSION: (%1) :: Mission #%2 started at %3 with %4 AI units and %5 difficulty at time %6",_missionName,_num,_pos,_AICount,_difficulty,_time]) call DMS_fnc_DebugLog;
 };

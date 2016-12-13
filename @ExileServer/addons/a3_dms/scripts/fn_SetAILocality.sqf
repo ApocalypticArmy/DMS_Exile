@@ -9,34 +9,30 @@
 	] call DMS_fnc_SetAILocality;
 
 	Makes a random player within 3 KM of the AI unit or group the owner.
-	Offloading AI can increase server performance.
+	Offloading AI will improve server performance, but the unit will no longer be local, which will limit the server's control over it.
 	Could however have negative effects if target player has a potato PC.
 
+	Returns true if a viable owner was found, false otherwise.
 */
-private ["_AI", "_pos", "_exit", "_client"];
 
-_AI = param [0,objNull,[objNull,grpNull]];
+private _AI = param [0,objNull,[objNull,grpNull]];
 
 if (isNull _AI) exitWith
 {
 	diag_log format ["DMS ERROR :: Calling DMS_SetAILocality with null parameter; _this: %1",_this];
 };
 
-if ((typeName _AI)=="OBJECT") then
-{
-	_pos = _AI;
-}
-else
-{
-	_pos = param [1,"",[objNull,[]],[2,3]];
-};
+private _AIType = typeName _AI;
+
+private _pos = if (_AIType isEqualTo "OBJECT") then {_AI} else {param [1,"",[objNull,[]],[2,3]]};
 
 if (_pos isEqualTo "") exitWith
 {
 	diag_log format ["DMS ERROR :: Calling DMS_SetAILocality with invalid position; this: %1",_this];
 };
 
-_client = objNull;
+
+private _client = objNull;
 
 {
 	if ((alive _x) && {(_x distance2D _pos)<=3000}) exitWith
@@ -45,18 +41,36 @@ _client = objNull;
 	};
 } forEach allPlayers;
 
+
 if (!isNull _client) then
 {
-	ExileServerOwnershipSwapQueue pushBack [_AI,_client];
+	private _swapped = if (_AIType isEqualTo "OBJECT") then {_AI setOwner (owner _client)} else {_AI setGroupOwner (owner _client)};
+
+	if (!_swapped) then
+	{
+		ExileServerOwnershipSwapQueue pushBack [_AI,_client];
+	};
+
+	if (DMS_ai_offload_notifyClient) then
+	{
+		private _msg = format ["DMS :: AI %1 |%2| has been offloaded to you.",_AIType,_AI];
+		_msg remoteExecCall ["systemChat", _client];
+		_msg remoteExecCall ["diag_log", _client];
+	};
+
 	if (DMS_DEBUG) then
 	{
-		diag_log format ["DMS_DEBUG SetAILocality :: Ownership swap of %1 (%4) to %2 (%3) is added to ExileServerOwnershipSwapQueue.",_AI,name _client,getPlayerUID _client,typeName _AI];
+		(format ["SetAILocality :: Ownership swap of %1 (%4) to %2 (%3) is initialized. Initial swap attempt successful: %5",_AI, name _client, getPlayerUID _client, _AIType, _swapped]) call DMS_fnc_DebugLog;
 	};
+
+	true
 }
 else
 {
 	if (DMS_DEBUG) then
 	{
-		diag_log format ["DMS_DEBUG SetAILocality :: No viable client found for the ownership of %1!",_AI];
+		(format ["SetAILocality :: No viable client found for the ownership of %1! _pos: %2.",_AI,_pos]) call DMS_fnc_DebugLog;
 	};
+
+	false
 };

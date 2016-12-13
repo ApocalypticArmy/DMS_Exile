@@ -2,70 +2,143 @@
 	DMS_fnc_BroadcastMissionStatus
 	Created by eraser1
 
-	Usage:	
-	_message call DMS_fnc_BroadcastMissionStatus;
+	https://github.com/Defent/DMS_Exile/wiki/DMS_fnc_BroadcastMissionStatus
 
-	Requires "DMS_PlayerNotificationTypes".
+	Usage:
+	[
+		_messageTitle,								// <string> The title of the message
+		[
+			_titleColor,							// <string> The color of the message (in hex colors)
+			_message,								// <any>	The actual message. Usually a string.
+			_status									// <string> (OPTIONAL) The mission status. eg "win" or "lose". Currently only used on Exile Toasts.
+		]
+	] call DMS_fnc_BroadcastMissionStatus;
 
-	Notification type "dynamicTextRequest" requires "DMS_dynamicText_Size" and "DMS_dynamicText_Color".
+	Returns nothing
 */
 
-
-private ["_missionName", "_messageInfo", "_titleColor", "_message"];
-
-_OK = params
+if !(params
 [
-	["_missionName","",[""]],
-	["_messageInfo",[],[[]],[2]]
-];
-
-if (!_OK) exitWith
+	"_messageTitle",
+	"_messageInfo"
+])
+exitWith
 {
 	diag_log format ["DMS ERROR :: Calling DMS_fnc_BroadcastMissionStatus with invalid parameters: %1",_this];
 };
 
 _messageInfo params
 [
-	["_titleColor","#FFFF00",[""]],
-	["_message","",[""]]
+	"_titleColor",
+	"_message"
 ];
 
 if (DMS_DEBUG) then
 {
-	diag_log format["DMS_DEBUG BroadcastMissionStatus :: Notification types: |%1| for broadcasting mission status: %2",DMS_PlayerNotificationTypes,_message];
+	(format["BroadcastMissionStatus :: Notification types: |%1| for broadcasting mission status: %2",DMS_PlayerNotificationTypes,_message]) call DMS_fnc_DebugLog;
 };
 
-if ((typeName _message) != "STRING") then
+if !(_message isEqualType "") then
 {
 	_message = str _message;
 };
 
-{
-	private "_args";
+private _status =
+	if ((count _messageInfo)>2) then
+	{
+		_messageInfo select 2
+	}
+	else
+	{
+		"start"
+	};
 
+{
 	switch (toLower _x) do
-	{ 
+	{
 		case "systemchatrequest":
 		{
-			[_x, [format ["%1: %2",toUpper _missionName,_message]]] call ExileServer_system_network_send_broadcast;
+			format["%1: %2",toUpper _messageTitle,_message] remoteExecCall ["systemChat",-2];
+		};
+
+		case "exiletoasts":
+		{
+			private _toast_type =
+				switch (_status) do
+				{
+					case "win": {"SuccessEmpty"};
+					case "lose": {"ErrorEmpty"};
+					default {"InfoEmpty"};		// case "start":
+				};
+
+			[
+			    "toastRequest",
+			    [
+			        _toast_type,
+			        [
+			            format
+			            [
+			                "<t color='%1' size='%2' font='%3'>%4</t><br/><t color='%5' size='%6' font='%7'>%8</t>",
+			                _titleColor,
+			                DMS_ExileToasts_Title_Size,
+			                DMS_ExileToasts_Title_Font,
+			                _messageTitle,
+			                DMS_ExileToasts_Message_Color,
+			                DMS_ExileToasts_Message_Size,
+			                DMS_ExileToasts_Message_Font,
+			                _message
+			            ]
+			        ]
+			    ]
+			] call ExileServer_system_network_send_broadcast;
 		};
 
 		case "standardhintrequest":
 		{
-			[_x, [format ["<t color='%1' size='1.25'>%2</t><br/> %3",_titleColor,_missionName,_message]]] call ExileServer_system_network_send_broadcast;
+			format
+			[
+				"<t color='%1' size='%2' font='%3'>%4</t><br/><t color='%5' size='%6' font='%7'>%8</t>",
+				_titleColor,
+				DMS_standardHint_Title_Size,
+				DMS_standardHint_Title_Font,
+				_messageTitle,
+				DMS_standardHint_Message_Color,
+				DMS_standardHint_Message_Size,
+				DMS_standardHint_Message_Font,
+				_message
+			] remoteExecCall ["DMS_CLIENT_fnc_hintSilent",-2];
 		};
 
 		case "dynamictextrequest":
 		{
 			(format
-			[	
-				'<t color="%1" size="1" >%2</t><br/><t color="%3" size="%4" >%5</t>',
+			[
+				"<t color='%1' size='%2' font='%3'>%4</t><br/><t color='%5' size='%6' font='%7'>%8</t>",
 				_titleColor,
-				_missionName,
-				DMS_dynamicText_Color,
-				DMS_dynamicText_Size,_message
-			])
-			remoteExecCall ["DMS_CLIENT_fnc_spawnDynamicText", -2];
+				DMS_dynamicText_Title_Size,
+				DMS_dynamicText_Title_Font,
+				_messageTitle,
+				DMS_dynamicText_Message_Color,
+				DMS_dynamicText_Message_Size,
+				DMS_dynamicText_Message_Font,
+				_message
+			]) remoteExecCall ["DMS_CLIENT_fnc_spawnDynamicText", -2];
+		};
+
+		case "texttilesrequest":
+		{
+			(format
+			[
+				"<t color='%1' size='%2' font='%3' align='center'>%4</t><br/><t color='%5' size='%6' font='%7' align='center'>%8</t>",
+				_titleColor,
+				DMS_textTiles_Title_Size,
+				DMS_textTiles_Title_Font,
+				_messageTitle,
+				DMS_textTiles_Message_Color,
+				DMS_textTiles_Message_Size,
+				DMS_textTiles_Message_Font,
+				_message
+			]) remoteExecCall ["DMS_CLIENT_fnc_spawnTextTiles", -2];
 		};
 
 		default { diag_log format ["DMS ERROR :: Unsupported Notification Type in DMS_PlayerNotificationTypes: %1 | Calling parameters: %2",_x,_this]; };
